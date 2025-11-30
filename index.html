@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>TOEIC Part3/4 先読みトレーナー（単一HTML・15問×2）</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#0f172a; --panel:#111827; --text:#e5e7eb; --muted:#94a3b8; --primary:#22c55e; --accent:#60a5fa; --danger:#ef4444; --warn:#f59e0b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui, Arial; display:flex; min-height:100vh; }
+  .wrap { margin:auto; width:min(1000px, 94vw); padding:16px 0 24px; }
+  .title { font-weight:800; font-size:clamp(20px, 3vw, 28px); margin-bottom:6px; }
+  .sub { color:var(--muted); margin-bottom:12px; }
+  .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  select, input, button { border:none; border-radius:10px; padding:10px 12px; font-size:14px; }
+  select, input { background:#1f2937; color:var(--text); }
+  button { cursor:pointer; font-weight:800; }
+  .btn { background:var(--primary); color:#041; }
+  .btn.secondary { background:var(--accent); color:#041; }
+  .btn.ghost { background:#1f2937; color:var(--text); }
+  .btn.warn { background:var(--warn); color:#041; }
+  .grid { display:grid; gap:14px; grid-template-columns: 1.2fr 1fr; }
+  .card { background:var(--panel); border-radius:12px; padding:14px; box-shadow:0 10px 30px rgba(0,0,0,.35); }
+  .label { font-weight:700; margin-bottom:8px; color:#cbd5e1; }
+  .meter { height:8px; background:#1f2937; border-radius:6px; overflow:hidden; margin-top:6px; }
+  .bar { height:100%; background:var(--primary); width:0%; transition:width .2s ease; }
+  .qa { display:grid; gap:8px; }
+  .opt { background:#1f2937; padding:10px; border-radius:10px; display:flex; gap:8px; align-items:center; }
+  .opt input { transform:scale(1.2); }
+  .muted { color:var(--muted); font-size:12px; }
+  .statusline { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:6px; color:#cbd5e1; }
+  .badge { display:inline-block; background:#1f2937; color:#93c5fd; border:1px solid #1e40af; border-radius:999px; padding:4px 10px; font-size:12px; margin-right:6px; }
+  .hist { font-size:13px; line-height:1.6; }
+  .scorebox { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .timer { font-weight:800; color:#86efac; }
+  .danger { color:#fca5a5; }
+  .uploader { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+  .small { font-size:12px; opacity:.8; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="title">TOEIC Part3/4 先読みトレーナー（単一HTML）</div>
+  <div class="sub">先読み枠固定 → 先読みタイマー → 音声（TTS/ファイル） → 選択 → 根拠 → 採点 → 履歴保存（15問×2）</div>
+
+  <!-- ツールバー -->
+  <div class="toolbar">
+    <select id="partSel">
+      <option value="P3">Part 3（会話）</option>
+      <option value="P4">Part 4（説明文）</option>
+    </select>
+    <select id="qSel"></select>
+    <button id="prevBtn" class="btn ghost">前へ</button>
+    <button id="nextBtn" class="btn ghost">次へ</button>
+    <button id="resetBtn" class="btn">初期化</button>
+    <div class="scorebox">
+      <span class="badge" id="scoreP3">P3 正答: 0</span>
+      <span class="badge" id="scoreP4">P4 正答: 0</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- 左：先読みパネル -->
+    <div class="card">
+      <div class="statusline">
+        <span id="statusText"></span>
+        <span class="badge" id="lockState">LOCK: OFF</span>
+        <span class="badge">TTS: <span id="ttsState">ON</span></span>
+      </div>
+      <div class="label">先読みフレーム（音声再生前に入力）</div>
+      <div class="toolbar">
+        <select id="focus">
+          <option value="WHO">WHO（誰が）</option>
+          <option value="WHAT">WHAT（何を）</option>
+          <option value="WHERE">WHERE（どこで）</option>
+          <option value="WHEN">WHEN（いつ）</option>
+        </select>
+        <input id="hint" type="text" placeholder="例：manager / schedule / venue / tomorrow">
+      </div>
+
+      <div class="toolbar">
+        <button id="lockBtn" class="btn">先読みロック</button>
+        <button id="clearBtn" class="btn ghost">クリア</button>
+        <button id="ttsToggle" class="btn warn">TTS切替（ON/OFF）</button>
+      </div>
+
+      <div class="label" style="margin-top:6px;">先読みタイマー</div>
+      <div class="toolbar">
+        <select id="preTime">
+          <option value="15">15秒</option>
+          <option value="20" selected>20秒</option>
+          <option value="30">30秒</option>
+        </select>
+        <button id="preStart" class="btn secondary">タイマー開始</button>
+        <span id="preRemain" class="timer">残り: --s</span>
+      </div>
+
+      <div class="meter"><div id="lockBar" class="bar"></div></div>
+      <div class="muted">ロックすると音声が再生可能になります。先読みタイマーで焦点を固定。</div>
+
+      <div class="label" style="margin-top:10px;">音声（読み上げ or ファイル）</div>
+      <div class="uploader">
+        <input type="file" id="audioFile" accept="audio/*">
+        <button id="playBtn" class="btn secondary">音声再生</button>
+        <span class="small">ファイル未選択時は、設問のTTSを読み上げます。</span>
+      </div>
+      <audio id="audio" controls style="width:100%; display:none;"></audio>
+    </div>
+
+    <!-- 右：設問＋選択肢 -->
+    <div class="card">
+      <div class="label" id="qText">設問</div>
+      <div id="opts" class="qa"></div>
+      <div class="toolbar" style="margin-top:8px;">
+        <input id="reason" type="text" placeholder="根拠メモ：聞こえた語 / 同義語 / 話者の意図 など" style="flex:1;">
+      </div>
+      <div class="toolbar" style="margin-top:8px;">
+        <button id="submitBtn" class="btn secondary">記録・採点</button>
+        <button id="nextAutoBtn" class="btn ghost">次の問題へ</button>
+      </div>
+      <div class="muted">手順：先読みの焦点とヒント語を固定 → タイマー → 音声 → 選択 → 根拠メモ → 記録・採点。</div>
+    </div>
+  </div>
+
+  <!-- 下：履歴 -->
+  <div class="card" style="margin-top:14px;">
+    <div class="label">履歴と自己分析（タグ化・localStorage保存）</div>
+    <div id="hist" class="hist"></div>
+  </div>
+</div>
+
+<script>
+  // ===== 問題データ（単一HTMLに内蔵） =====
+  const P3 = [], P4 = [];
+  const p3Samples = [
+    { id:1, text:"What are the speakers mainly discussing?", script:"A man and a woman are discussing a change of venue for a meeting.", options:["A. The meeting schedule","B. A venue change","C. Training requirements","D. Product announcements"], correct:"B" },
+    { id:2, text:"What does the man suggest?", script:"The man suggests booking a larger room due to the increased number of attendees.", options:["A. Delaying the event","B. Sending an e-mail","C. Booking a larger room","D. Canceling the session"], correct:"C" },
+    { id:3, text:"Who is required to attend the workshop?", script:"All new hires are required to attend the workshop this Friday.", options:["A. New hires","B. Sales managers","C. External partners","D. Senior engineers"], correct:"A" },
+  ];
+  const p4Samples = [
+    { id:1, text:"What is the announcement mainly about?", script:"This announcement informs staff about a schedule change for next week's briefing.", options:["A. Updated safety guidelines","B. A product recall","C. A schedule change","D. A building renovation"], correct:"C" },
+    { id:2, text:"What does the speaker ask listeners to confirm?", script:"Please confirm your attendance by replying to the invitation email.", options:["A. Their reservations","B. Their attendance","C. Their delivery address","D. Their payment method"], correct:"B" },
+    { id:3, text:"Where will the session take place?", script:"The session will take place in Conference Room B at 2 p.m.", options:["A. Conference Room B","B. The main auditorium","C. Training Center 3","D. Online via video call"], correct:"A" },
+  ];
+  function fillPlaceholders(arr, startId=4, kind="P3") {
+    for (let i=startId; i<=15; i++) {
+      arr.push({
+        id:i,
+        text:`Placeholder Q${i}: Practice comprehension (replace this text).`,
+        script:`This is a placeholder script for ${kind} question ${i}. Replace with real listening content.`,
+        options:["A. Option 1","B. Option 2","C. Option 3","D. Option 4"],
+        correct:"A",
+      });
+    }
+  }
+  P3.push(...p3Samples); fillPlaceholders(P3,4,"P3");
+  P4.push(...p4Samples); fillPlaceholders(P4,4,"P4");
+
+  // ===== 状態管理 =====
+  const partSel = document.getElementById('partSel');
+  const qSel = document.getElementById('qSel');
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const resetBtn = document.getElementById('resetBtn');
+
+  const focusEl = document.getElementById('focus');
+  const hintEl = document.getElementById('hint');
+  const lockBtn = document.getElementById('lockBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const lockBar = document.getElementById('lockBar');
+  const lockState = document.getElementById('lockState');
+
+  const preTimeEl = document.getElementById('preTime');
+  const preStartBtn = document.getElementById('preStart');
+  const preRemainEl = document.getElementById('preRemain');
+
+  const audioEl = document.getElementById('audio');
+  const audioFileEl = document.getElementById('audioFile');
+  const playBtn = document.getElementById('playBtn');
+
+  const qTextEl = document.getElementById('qText');
+  const optsEl = document.getElementById('opts');
+  const reasonEl = document.getElementById('reason');
+  const submitBtn = document.getElementById('submitBtn');
+  const nextAutoBtn = document.getElementById('nextAutoBtn');
+
+  const histEl = document.getElementById('hist');
+  const statusText = document.getElementById('statusText');
+  const ttsToggle = document.getElementById('ttsToggle');
+  const ttsState = document.getElementById('ttsState');
+
+  let locked = false;
+  let qIndex = 1;
+  let preTimer = null;
+  let ttsEnabled = true; // 読み上げON/OFF
+  let score = { P3:0, P4:0 }; // 累計正答
+
+  function getBank() { return partSel.value === 'P3' ? P3 : P4; }
+
+  function refreshQSel() {
+    qSel.innerHTML = "";
+    for (let i=1; i<=15; i++) {
+      const opt = document.createElement('option');
+      opt.value = i; opt.textContent = `Q${i}`;
+      qSel.appendChild(opt);
+    }
+    qSel.value = qIndex;
+  }
+
+  function loadQuestion() {
+    const bank = getBank();
+    const q = bank.find(x => x.id === qIndex);
+    qTextEl.textContent = q.text;
+    optsEl.innerHTML = "";
+    q.options.forEach((label, idx) => {
+      const val = String.fromCharCode(65+idx);
+      const div = document.createElement('label');
+      div.className = 'opt';
+      div.innerHTML = `<input type="radio" name="ans" value="${val}"> ${label}`;
+      optsEl.appendChild(div);
+    });
+    statusText.textContent = `Part: ${partSel.value} / Q${qIndex}`;
+    clearSelect();
+    updateLockUI();
+    stopTTS();
+  }
+
+  function clearSelect() {
+    document.querySelectorAll('input[name="ans"]').forEach(r => r.checked = false);
+    reasonEl.value = '';
+  }
+
+  function updateLockUI() {
+    lockBar.style.width = locked ? '100%' : '0%';
+    lockState.textContent = `LOCK: ${locked ? 'ON' : 'OFF'}`;
+    lockState.style.color = locked ? '#22c55e' : '#e5e7eb';
+  }
+
+  // 先読みロック
+  lockBtn.addEventListener('click', () => { locked = true; updateLockUI(); });
+  clearBtn.addEventListener('click', () => { locked = false; hintEl.value = ''; updateLockUI(); });
+
+  // 先読みタイマー
+  preStartBtn.addEventListener('click', () => {
+    if (preTimer) { clearInterval(preTimer); preTimer = null; }
+    let remain = +preTimeEl.value;
+    preRemainEl.textContent = `残り: ${remain}s`;
+    preTimer = setInterval(() => {
+      remain--;
+      preRemainEl.textContent = `残り: ${remain}s`;
+      if (remain <= 0) {
+        clearInterval(preTimer); preTimer = null;
+        preRemainEl.textContent = `残り: 0s`;
+        locked = true; updateLockUI();
+      }
+    }, 1000);
+  });
+
+  // 音声再生（TTS or ファイル）
+  playBtn.addEventListener('click', () => {
+    if (!locked) { alert('先読みロックが必要です'); return; }
+    const bank = getBank();
+    const q = bank.find(x => x.id === qIndex);
+    if (audioFileEl.files && audioFileEl.files[0]) {
+      const file = audioFileEl.files[0];
+      const url = URL.createObjectURL(file);
+      audioEl.src = url;
+      audioEl.style.display = 'block';
+      audioEl.play().catch(()=>{});
+    } else {
+      if (!ttsEnabled) { alert('TTSがOFFです。ファイルを選ぶかTTSをONにしてください。'); return; }
+      speak(q.script);
+    }
+  });
+
+  // TTS制御
+  function speak(text) {
+    stopTTS();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'en-US'; // 英語リスニング用
+    utter.rate = 1.0;
+    speechSynthesis.speak(utter);
+  }
+  function stopTTS() {
+    if (speechSynthesis.speaking) speechSynthesis.cancel();
+  }
+  ttsToggle.addEventListener('click', () => {
+    ttsEnabled = !ttsEnabled;
+    ttsState.textContent = ttsEnabled ? 'ON' : 'OFF';
+  });
+
+  // ナビゲーション
+  partSel.addEventListener('change', () => { qIndex = 1; refreshQSel(); loadQuestion(); });
+  qSel.addEventListener('change', () => { qIndex = +qSel.value; loadQuestion(); });
+  prevBtn.addEventListener('click', () => { if (qIndex > 1) { qIndex--; qSel.value = qIndex; loadQuestion(); } });
+  nextBtn.addEventListener('click', () => { if (qIndex < 15) { qIndex++; qSel.value = qIndex; loadQuestion(); } });
+
+  resetBtn.addEventListener('click', () => {
+    locked = false; hintEl.value = ''; focusEl.value = 'WHO';
+    qIndex = 1; partSel.value = 'P3'; refreshQSel(); loadQuestion();
+    score.P3 = 0; score.P4 = 0; updateScore();
+    histEl.innerHTML = '';
+    localStorage.removeItem('toeic_pre_hist');
+  });
+
+  // 記録・採点
+  submitBtn.addEventListener('click', () => {
+    const bank = getBank();
+    const q = bank.find(x => x.id === qIndex);
+    const focus = focusEl.value;
+    const hint = hintEl.value.trim();
+    const ans = document.querySelector('input[name="ans"]:checked')?.value || '(未選択)';
+    const correct = q.correct;
+    const reason = reasonEl.value.trim();
+    const when = new Date().toLocaleString();
+
+    const verdict = ans === correct ? '✔ 正答' : (ans === '(未選択)' ? '— 未選択' : '✘ 誤答');
+    if (ans === correct) {
+      score[partSel.value]++; updateScore();
+    }
+
+    const row = document.createElement('div');
+    row.innerHTML = `
+      <span class="badge">${partSel.value}</span>
+      <span class="badge">Q${qIndex}</span>
+      <span class="badge">${focus}</span>
+      <span class="badge">hint: ${hint || '-'}</span>
+      <span class="badge">ans: ${ans}</span>
+      <span class="badge">correct: ${correct}</span>
+      <span class="badge" style="background:${ans===correct?'#062014':'#1f0f12'};color:${ans===correct?'#86efac':'#fca5a5'};border-color:${ans===correct?'#14532d':'#7f1d1d'}">${verdict}</span>
+      <span class="badge">reason: ${reason || '-'}</span>
+      <span class="badge" style="background:#0b1220;color:#7dd3fc;border-color:#0ea5e9;">${when}</span>
+    `;
+    histEl.prepend(row);
+
+    // 永続化
+    const saved = JSON.parse(localStorage.getItem('toeic_pre_hist') || '[]');
+    saved.unshift({
+      part: partSel.value, qIndex, focus, hint, ans, correct, verdict, reason, when
+    });
+    localStorage.setItem('toeic_pre_hist', JSON.stringify(saved));
+  });
+
+  // 次の問題へ
+  nextAutoBtn.addEventListener('click', () => {
+    if (qIndex < 15) { qIndex++; qSel.value = qIndex; }
+    locked = false; hintEl.value = ''; updateLockUI();
+    clearSelect(); stopTTS(); loadQuestion();
+  });
+
+  function updateScore() {
+    document.getElementById('scoreP3').textContent = `P3 正答: ${score.P3}`;
+    document.getElementById('scoreP4').textContent = `P4 正答: ${score.P4}`;
+  }
+
+  // 履歴読み込み
+  (function initHistFromStorage(){
+    const saved = JSON.parse(localStorage.getItem('toeic_pre_hist') || '[]');
+    saved.forEach(s => {
+      const row = document.createElement('div');
+      row.innerHTML = `
+        <span class="badge">${s.part}</span>
+        <span class="badge">Q${s.qIndex}</span>
+        <span class="badge">${s.focus}</span>
+        <span class="badge">hint: ${s.hint || '-'}</span>
+        <span class="badge">ans: ${s.ans}</span>
+        <span class="badge">correct: ${s.correct}</span>
+        <span class="badge" style="background:${s.ans===s.correct?'#062014':'#1f0f12'};color:${s.ans===s.correct?'#86efac':'#fca5a5'};border-color:${s.ans===s.correct?'#14532d':'#7f1d1d'}">${s.verdict}</span>
+        <span class="badge">reason: ${s.reason || '-'}</span>
+        <span class="badge" style="background:#0b1220;color:#7dd3fc;border-color:#0ea5e9;">${s.when}</span>
+      `;
+      histEl.appendChild(row);
+    });
+  })();
+
+  // 初期表示
+  refreshQSel(); loadQuestion(); updateLockUI(); updateScore();
+</script>
+</body>
+</html>
